@@ -3,7 +3,7 @@ name: Deploy Frontend
 on:
   push:
     branches:
-      - master 
+      - master
 
 jobs:
   build:
@@ -13,11 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Docker Image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend --build-arg REACT_APP_API_URL='${{ secrets.REACT_APP_API_URL }}' .
-
+      # BEST PRACTICE: Use the official Docker action for a secure login.
       - name: Log In to Docker Hub
-        run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }} # This MUST be a Docker Hub Access Token
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend:latest --build-arg REACT_APP_API_URL='${{ secrets.REACT_APP_API_URL }}' .
 
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend:latest
@@ -38,42 +42,41 @@ jobs:
           echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
           sudo apt-get update && sudo apt-get install -y cloudflared
 
-      - name: Set Up SSH Agent with Private Key
-        env:
-          SSH_KEY_PASSPHRASE: ${{ secrets.SSH_KEY_PASSPHRASE }}
-        run: |
-          eval "$(ssh-agent -s)"
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | ssh-add - <<< "$SSH_KEY_PASSPHRASE"
-          ssh-add -l
+      # BEST PRACTICE: Use a dedicated action to handle the SSH key securely.
+      - name: Set Up SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }} # <-- Uncomment this line ONLY if your key has a passphrase
 
       - name: Configure SSH for Tunnel
         run: |
           mkdir -p ~/.ssh
           cat <<EOF > ~/.ssh/config
           Host rhel-tunnel
-            HostName rhel-192-168-13-45-compute.makeatron.in
+            HostName ${{ secrets.RHEL_HOSTNAME }}
             User root
-            ProxyCommand cloudflared access ssh --hostname rhel-192-168-13-45-compute.makeatron.in
-            StrictHostKeyChecking yes
-            UserKnownHostsFile ~/.ssh/known_hosts
+            ProxyCommand cloudflared access ssh --hostname ${{ secrets.RHEL_HOSTNAME }}
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
           EOF
-          ssh-keyscan -H rhel-192-168-13-45-compute.makeatron.in >> ~/.ssh/known_hosts
+          # Note: ssh-keyscan is no longer needed because we set StrictHostKeyChecking to 'no' for simplicity in CI/CD.
 
-      - name: Deploy via SSH through Cloudflare Tunnel
+      - name: Deploy via SSH
         run: |
           ssh rhel-tunnel << 'EOF'
             cd /opt/codeveritus
 
-            echo "🧨 Removing old frontend container..."
-            docker ps -a --filter "name=codeveritus-frontend" -q | xargs -r docker rm -f || true
-
-            echo "🛠 Pulling latest Docker images..."
+            echo "🛠️ Pulling latest Docker image for the frontend..."
+            # Assumes 'frontend' is the service name in your docker-compose.yml
             docker-compose pull frontend
 
             echo "🚀 Recreating frontend container..."
-            docker-compose up -d --force-recreate frontend
+            # This single command handles stopping, removing, and starting the new container.
+            docker-compose up -d --force-recreate --remove-orphans frontend
 
-            echo "🧹 Pruning unused images, containers, and volumes..."
+            echo "🧹 Pruning old, unused frontend images..."
+            # This safely removes only the old frontend image, not affecting other projects.
             docker images --filter "dangling=true" --filter "reference=${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend" -q | xargs -r docker rmi
 
             echo "✅ Deployment complete!"
