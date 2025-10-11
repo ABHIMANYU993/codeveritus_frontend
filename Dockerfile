@@ -20,14 +20,13 @@ RUN npm run build
 # Stage 2: Serve with Node (HTTP ONLY)
 FROM node:18-alpine AS prod
 WORKDIR /app
-RUN npm install -g http-server
+# 1. Install the 'serve' package instead of 'http-server'
+RUN npm install -g serve
 COPY --from=build /app/build ./build
 
 EXPOSE 3000
-# UPDATED COMMAND: Serve plain HTTP. No certs needed.
-CMD ["http-server", "build", "-p", "3000", "--history-api-fallback"]
-
-# WORKDIR /app
+# 2. Use 'serve' with the '-s' flag to handle SPA routing
+CMD ["serve", "-s", "build", "-l", "3000"]# WORKDIR /app
 # COPY package.json package-lock.json ./
 # RUN npm ci
 # COPY . .
