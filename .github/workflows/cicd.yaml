@@ -69,16 +69,15 @@ jobs:
 
             echo "🛠️ Pulling latest Docker image for the frontend..."
             # Assumes 'frontend' is the service name in your docker-compose.yml
-            docker-compose pull frontend
+            docker compose pull frontend
 
             echo "🚀 Recreating frontend container..."
             # This single command handles stopping, removing, and starting the new container.
-            docker-compose up -d --force-recreate --remove-orphans frontend
+            docker compose up -d --force-recreate --remove-orphans frontend
 
             echo "🧹 Pruning old, unused frontend images..."
             # This safely removes only the old frontend image, not affecting other projects.
             docker images --filter "dangling=true" --filter "reference=${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend" -q | xargs -r docker rmi
 
             echo "✅ Deployment complete!"
-            docker ps
           EOF
