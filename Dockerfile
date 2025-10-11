@@ -25,7 +25,7 @@ COPY --from=build /app/build ./build
 
 EXPOSE 3000
 # UPDATED COMMAND: Serve plain HTTP. No certs needed.
-CMD ["http-server", "build", "-p", "3000"]
+CMD ["http-server", "build", "-p", "3000", "--history-api-fallback"]
 
 # WORKDIR /app
 # COPY package.json package-lock.json ./
