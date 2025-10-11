@@ -47,7 +47,7 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }} # <-- Uncomment this line ONLY if your key has a passphrase
+          ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }} # <-- Uncomment this line ONLY if your key has a passphrase
 
       - name: Configure SSH for Tunnel
         run: |
