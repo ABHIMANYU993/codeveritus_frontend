@@ -25,8 +25,7 @@ jobs:
 
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend:latest
-
-deploy:
+  deploy:
     name: Deploy to Alpine via Local LXC Runner
     runs-on: self-hosted # <--- THIS IS THE MAGIC WORD. GitHub sends the job to your LXC.
     needs: build
