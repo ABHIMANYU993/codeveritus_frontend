@@ -36,12 +36,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # BEST PRACTICE: Use a dedicated action to handle the SSH key securely.
+      # BEST PRACTICE: Native ssh-agent setup to support passphrases securely
       - name: Set Up SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+        env:
+          SSH_PASSPHRASE: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          # Start ssh-agent and export the socket so subsequent steps can use it
+          ssh-agent -a /tmp/ssh_agent.sock > /dev/null
+          echo "SSH_AUTH_SOCK=/tmp/ssh_agent.sock" >> $GITHUB_ENV
+          
+          # Securely save the private key
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Create a temporary askpass script to feed the passphrase securely
+          echo 'echo "${SSH_PASSPHRASE}"' > /tmp/askpass.sh
+          chmod +x /tmp/askpass.sh
+          
+          # Add the key to the agent using the askpass trick
+          DISPLAY=none SSH_ASKPASS=/tmp/askpass.sh ssh-add ~/.ssh/id_rsa < /dev/null
 
       - name: Configure Enterprise Grade SSH
         run: |
