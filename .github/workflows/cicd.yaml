@@ -26,38 +26,31 @@ jobs:
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend:latest
 
-  deploy:
-    name: Deploy to RHEL via Cloudflare Tunnel
-    runs-on: ubuntu-latest
+deploy:
+    name: Deploy to Alpine via Local LXC Runner
+    runs-on: self-hosted # <--- THIS IS THE MAGIC WORD. GitHub sends the job to your LXC.
     needs: build
-    permissions:
-      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # BEST PRACTICE: Enterprise-grade remote SSH execution. 
-      # Natively handles passphrases and hardened handshakes.
-      - name: Enterprise Grade SSH Deployment
+      - name: Local SSH Deployment
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
+          host: ${{ secrets.SSH_HOST }} # Your Alpine VM's local IP address
           username: ${{ secrets.SSH_USERNAME }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }} # Put the LXC's id_ed25519 private key in GitHub secrets
+          # No passphrase needed, no port forwarding, no DDNS!
           script: |
             cd ${{ secrets.DEPLOY_DIR }}
 
-            echo "🛠️ Pulling latest Docker image for the frontend..."
+            echo "🛠️ Pulling latest Docker image..."
             docker compose pull frontend
 
             echo "🚀 Recreating frontend container..."
-            # This single command handles stopping, removing, and starting the new container.
             docker compose up -d --force-recreate --remove-orphans frontend
 
-            echo "🧹 Pruning old, unused frontend images..."
-            # This safely removes only the old frontend image, not affecting other projects.
+            echo "🧹 Pruning old images..."
             docker images --filter "dangling=true" --filter "reference=${{ secrets.DOCKER_USERNAME }}/codeveritus-frontend" -q | xargs -r docker rmi
-
-            echo "✅ Deployment complete!"
+            
+            echo "✅ Local Enterprise Deployment complete!"
