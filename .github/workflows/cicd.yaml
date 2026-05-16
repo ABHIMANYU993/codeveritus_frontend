@@ -36,39 +36,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install cloudflared
-        run: |
-          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-          echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
-          sudo apt-get update && sudo apt-get install -y cloudflared
-
       # BEST PRACTICE: Use a dedicated action to handle the SSH key securely.
       - name: Set Up SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }} # <-- Uncomment this line ONLY if your key has a passphrase
+          ssh-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
 
-      - name: Configure SSH for Tunnel
+      - name: Configure Enterprise Grade SSH
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Military-grade SSH Hardening (Matching server sshd_config)
           cat <<EOF > ~/.ssh/config
-          Host rhel-tunnel
-            HostName ${{ secrets.RHEL_HOSTNAME }}
-            User root
-            ProxyCommand cloudflared access ssh --hostname ${{ secrets.RHEL_HOSTNAME }}
+          Host alpine-vm
+            HostName ${{ secrets.SSH_HOST }}
+            User ${{ secrets.SSH_USERNAME }}
+            Port ${{ secrets.SSH_PORT }}
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
+            IdentitiesOnly yes
+            Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+            MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com
+            KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
           EOF
-          # Note: ssh-keyscan is no longer needed because we set StrictHostKeyChecking to 'no' for simplicity in CI/CD.
+          chmod 600 ~/.ssh/config
 
       - name: Deploy via SSH
         run: |
-          ssh rhel-tunnel << 'EOF'
-            cd /opt/codeveritus
+          ssh alpine-vm << 'EOF'
+            cd ${{ secrets.DEPLOY_DIR }}
 
             echo "🛠️ Pulling latest Docker image for the frontend..."
-            # Assumes 'frontend' is the service name in your docker-compose.yml
             docker compose pull frontend
 
             echo "🚀 Recreating frontend container..."
